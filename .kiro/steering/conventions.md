@@ -24,6 +24,11 @@ UPDATE <tabla> SET eliminado = TRUE WHERE id = :id AND eliminado = FALSE;
 Toda consulta de datos vigentes debe filtrar `WHERE eliminado = FALSE`.
 Las vistas `v_categorias_vigentes`, `v_productos_vigentes`, `v_pedidos_resumen` y `v_pedido_detalle` ya aplican ese filtro; úsalas en lugar de escribir el filtro a mano cuando sea posible.
 
+**En consultas con varios JOIN, el filtro debe aplicarse en CADA tabla involucrada**,
+no solo en la principal. Omitirlo en una sola tabla del JOIN puede hacer que dos
+consultas "parezcan" equivalentes sin serlo (por ejemplo, sumar pedidos de un usuario
+ya eliminado, o incluir productos de una categoría dada de baja).
+
 ### Baja de un pedido completo
 
 La baja de un pedido requiere una transacción explícita que marque primero los detalles y luego el pedido:
@@ -65,10 +70,25 @@ Controla si el producto puede ser pedido. El procedimiento `sp_crear_pedido` rec
 
 ## Índices existentes
 
+### Del schema original (`schema.sql`)
+
 ```sql
 idx_producto_categoria_id   -- producto.categoria_id
 idx_pedido_usuario_id       -- pedido.usuario_id
 idx_producto_nombre_vigente -- producto(nombre) WHERE eliminado = FALSE  (índice parcial)
 ```
 
-No duplicar estos índices al agregar nuevas consultas.
+### Agregados en la práctica anterior (`indices_semana3.sql`)
+
+```sql
+idx_pedido_fecha_estado_vigente
+    -- pedido(fecha, estado) WHERE eliminado = FALSE
+    -- Acelera filtros por rango de fechas + estado (Seq Scan -> Bitmap Heap Scan)
+
+idx_pedido_usuario_total_estado
+    -- pedido(usuario_id, total) WHERE eliminado = FALSE AND estado IN ('CONFIRMADO', 'TERMINADO')
+    -- Habilita Index Only Scan para agregaciones de gasto por usuario
+```
+
+**No duplicar ninguno de estos índices** al proponer optimizaciones nuevas — antes
+de sugerir un `CREATE INDEX`, verificar si alguno de los 5 ya cubre el caso.
