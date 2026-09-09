@@ -1,0 +1,55 @@
+Ya está lista mi Parte 1. Te paso la consulta y el plan real de la Consulta 2 (historial de compras por usuario) — tiene 3 nodos de Nested Loop, buen material para lo que pide la consigna de tu parte sobre identificar cuál tabla es la "externa" y cuál la "interna" en cada uno.
+
+Consulta (versión ya corregida, con el filtro de borrado lógico completo)
+SELECT u.nombre, u.apellido, p.fecha, p.estado, pr.nombre AS producto, dp.cantidad, dp.subtotal
+FROM usuario u
+JOIN pedido p ON p.usuario_id = u.id AND p.eliminado = FALSE
+JOIN detalle_pedido dp ON dp.pedido_id = p.id AND dp.eliminado = FALSE
+JOIN producto pr ON pr.id = dp.producto_id AND pr.eliminado = FALSE
+WHERE u.id = 1
+ORDER BY p.fecha DESC;
+
+Plan real (EXPLAIN ANALYZE, BUFFERS)
+"Sort  (cost=177.49..177.54 rows=20 width=60) (actual time=0.595..0.600 rows=22 loops=1)"
+"  Sort Key: p.fecha DESC"
+"  Sort Method: quicksort  Memory: 26kB"
+"  Buffers: shared hit=138"
+"  ->  Nested Loop  (cost=5.50..177.06 rows=20 width=60) (actual time=0.170..0.559 rows=22 loops=1)"
+"        Buffers: shared hit=138"
+"        ->  Nested Loop  (cost=5.21..170.70 rows=20 width=54) (actual time=0.153..0.378 rows=22 loops=1)"
+"              Buffers: shared hit=72"
+"              ->  Nested Loop  (cost=4.79..51.51 rows=10 width=43) (actual time=0.129..0.170 rows=11 loops=1)"
+"                    Buffers: shared hit=18"
+"                    ->  Index Scan using usuario_pkey on usuario u  (cost=0.29..8.30 rows=1 width=35) (actual time=0.052..0.053 rows=1 loops=1)"
+"                          Index Cond: (id = 1)"
+"                          Buffers: shared hit=3"
+"                    ->  Bitmap Heap Scan on pedido p  (cost=4.50..43.11 rows=10 width=24) (actual time=0.073..0.108 rows=11 loops=1)"
+"                          Recheck Cond: (usuario_id = 1)"
+"                          Filter: (NOT eliminado)"
+"                          Rows Removed by Filter: 1"
+"                          Heap Blocks: exact=12"
+"                          Buffers: shared hit=15"
+"                          ->  Bitmap Index Scan on idx_pedido_usuario_id  (cost=0.00..4.50 rows=10 width=0) (actual time=0.035..0.035 rows=12 loops=1)"
+"                                Index Cond: (usuario_id = 1)"
+"                                Buffers: shared hit=3"
+"              ->  Index Scan using detalle_pedido_pedido_id_producto_id_key on detalle_pedido dp  (cost=0.42..11.90 rows=2 width=27) (actual time=0.014..0.017 rows=2 loops=11)"
+"                    Index Cond: (pedido_id = p.id)"
+"                    Filter: (NOT eliminado)"
+"                    Buffers: shared hit=54"
+"        ->  Index Scan using producto_pkey on producto pr  (cost=0.29..0.32 rows=1 width=22) (actual time=0.007..0.007 rows=1 loops=22)"
+"              Index Cond: (id = dp.producto_id)"
+"              Filter: (NOT eliminado)"
+"              Buffers: shared hit=66"
+"Planning:"
+"  Buffers: shared hit=29"
+"Planning Time: 1.552 ms"
+"Execution Time: 0.709 ms"
+
+
+Datos que te pueden servir para armar el prompt
+Hay 3 nodos de Nested Loop, anidados uno dentro de otro.
+El más interno arranca con Index Scan using usuario_pkey (filtro id = 1) como tabla externa, y hace loop contra Bitmap Heap Scan on pedido como interna.
+El segundo Nested Loop toma ese resultado como externa y lo cruza contra Index Scan on detalle_pedido (por la unique key pedido_id, producto_id).
+El tercer Nested Loop (el más externo) toma ese resultado y lo cruza contra Index Scan using producto_pkey — notá el loops=22 en este último nodo, porque se ejecuta una vez por cada fila que llega desde adentro.
+
+Para tu Parte 2, recordá pasarle a la IA solo el texto del plan (sin la consulta con alias descriptivos ni este análisis mío), para no contaminar su respuesta con una interpretación previa — así después podés contrastar en limpio si identifica bien qué tabla es la "externa" y cuál la "interna" en cada uno de los 3 Nested Loop.
