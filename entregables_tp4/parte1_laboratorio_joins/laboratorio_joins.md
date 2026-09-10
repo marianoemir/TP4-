@@ -13,7 +13,7 @@ Cruza 4 tablas: `detalle_pedido`, `pedido`, `producto`, `categoria`.
 ```sql
 SELECT c.nombre AS categoria,
        date_trunc('month', ped.fecha) AS mes,
-       SUM(dp.subtotal) AS facturado
+       SUM(dp.subtotal) AS factura
 FROM detalle_pedido dp
 JOIN pedido ped ON ped.id = dp.pedido_id AND ped.eliminado = FALSE
 JOIN producto pr ON pr.id = dp.producto_id
@@ -304,17 +304,3 @@ por ruido de medición dado el bajo volumen de filas, no atribuible al filtro).
 | 1. Facturación por categoría y mes | 3x Hash Join (1 paralelo) | Se descartaron 3 propuestas de índice de la IA (asumían filtros de fecha/categoría que la consulta real no tiene); se corrigió `eliminado = FALSE` faltante en `producto` y `categoria` | 3x Hash Join (1 paralelo) — **sin cambio de algoritmo** | Sin mejora de performance (601.667 → 641.616 ms, la corrección agrega costo); mejora de **corrección de datos** |
 | 2. Historial de compras por usuario | 3x Nested Loop | Se corrigió `eliminado = FALSE` faltante en `producto` | 3x Nested Loop — **sin cambio de algoritmo** | Tiempo similar (1.157 → 0.709 ms, variación por bajo volumen); mejora de **corrección de datos** |
 
-## Conclusión para la defensa oral
-
-- El **algoritmo de join depende de la selectividad**, no de si hay o no un
-  índice disponible: Hash Join cuando hay que procesar el 100% de una tabla
-  grande (agregación global sin filtro), Nested Loop cuando un filtro puntual
-  reduce el volumen de entrada a un puñado de filas.
-- **3 de 4 propuestas de la IA fueron rechazadas** porque describían un
-  escenario hipotético (con filtros que la consulta real no tenía), no el plan
-  real entregado — se documenta el rechazo, no se descarta en silencio.
-- En ambas consultas, el hallazgo real no fue de performance sino de
-  **corrección**: faltaba el filtro de borrado lógico en `producto` (y en
-  `categoria` en la Consulta 1). Se corrigió en las dos, y se documentó
-  explícitamente que en la Consulta 1 esto **no mejoró el tiempo** (incluso lo
-  empeoró levemente) — corrección y performance no siempre van de la mano.
